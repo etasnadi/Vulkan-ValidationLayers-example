@@ -655,3 +655,52 @@ TEST_F(PositiveMemory, ZeroInitializeDeviceMemory) {
     vkt::DeviceMemory memory(*m_device, alloc_info);
     vk::BindImageMemory(device(), image, memory, 0);
 }
+
+TEST_F(PositiveMemory, DedicatedAllocationExportMemory) {
+    TEST_DESCRIPTION(
+        "Tests if VkExportMemoryAllocateInfo::handleTypes properly set to zero when DedicatedAllocation contains valid Image and "
+        "Buffer objects. ");
+    // VK_KHR_dedicated_allocation supported in 1.1
+    SetTargetApiVersion(VK_API_VERSION_1_1);
+    RETURN_IF_SKIP(Init());
+
+    const VkFormat normal_format = VK_FORMAT_R8G8B8A8_UNORM;
+
+    VkImageCreateInfo image_create_info =
+        vkt::Image::ImageCreateInfo2D(64, 64, 1, 1, normal_format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+
+    VkBufferCreateInfo buffer_create_info = vku::InitStructHelper();
+    buffer_create_info.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    buffer_create_info.size = 2048;
+
+    // Create Images and Buffers without any memory backing
+    VkImage normal_image = VK_NULL_HANDLE;
+    vk::CreateImage(device(), &image_create_info, nullptr, &normal_image);
+
+    VkBuffer normal_buffer = VK_NULL_HANDLE;
+    vk::CreateBuffer(device(), &buffer_create_info, nullptr, &normal_buffer);
+
+    VkDeviceMemory device_memory;
+    VkMemoryDedicatedAllocateInfo dedicated_allocate_info = vku::InitStructHelper();
+    VkMemoryAllocateInfo memory_allocate_info = vku::InitStructHelper(&dedicated_allocate_info);
+    memory_allocate_info.memoryTypeIndex = 0;
+    memory_allocate_info.allocationSize = 64;
+
+    // Both image and buffer set in dedicated allocation
+    dedicated_allocate_info.image = normal_image;
+    dedicated_allocate_info.buffer = normal_buffer;
+
+    // Chain a VkExportMemoryAllocateInfo
+    VkExportMemoryAllocateInfo export_memory_info = vku::InitStructHelper();
+    export_memory_info.handleTypes = 0;  // This must emit VUID-*-TEST1
+
+    dedicated_allocate_info.pNext = &export_memory_info;
+
+    // Catch the error emitted by defining both the image and buffer
+    m_errorMonitor->SetDesiredError("VUID-VkMemoryDedicatedAllocateInfo-image-01432");
+    vk::AllocateMemory(device(), &memory_allocate_info, NULL, &device_memory);
+    m_errorMonitor->VerifyFound();
+
+    vk::DestroyImage(device(), normal_image, nullptr);
+    vk::DestroyBuffer(device(), normal_buffer, nullptr);
+}

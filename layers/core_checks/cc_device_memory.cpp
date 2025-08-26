@@ -472,6 +472,15 @@ bool CoreChecks::PreCallValidateAllocateMemory(VkDevice device, const VkMemoryAl
             skip |= LogError("VUID-VkMemoryDedicatedAllocateInfo-image-01432", device, allocate_info_loc,
                              "pNext<VkMemoryDedicatedAllocateInfo> buffer (%s) or image (%s) has to be VK_NULL_HANDLE.",
                              FormatHandle(dedicated_buffer).c_str(), FormatHandle(dedicated_image).c_str());
+
+            auto export_allocate_info = vku::FindStructInPNextChain<VkExportMemoryAllocateInfo>(pAllocateInfo->pNext);
+            if (export_allocate_info && export_allocate_info->handleTypes != 0) {
+                skip |= LogError(
+                    "VUID-VkMemoryAllocateInfo-pNext-TEST1", device, allocate_info_loc,
+                    "If the pNext chain includes a VkMemoryDedicatedAllocateInfo structure with its buffer member specifying a "
+                    "valid VkBuffer and its image member specifying a valid VkImage, and the pNext chain also includes a "
+                    "VkExportMemoryAllocateInfo structure, then VkExportMemoryAllocateInfo::handleTypes must be zero");
+            }
         } else if (dedicated_image != VK_NULL_HANDLE) {
             // Dedicated VkImage
             const LogObjectList objlist(device, dedicated_image);
